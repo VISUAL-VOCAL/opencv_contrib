@@ -206,6 +206,8 @@ struct CV_EXPORTS_W DetectorParameters {
  * @param parameters marker detection parameters
  * @param rejectedImgPoints contains the imgPoints of those squares whose inner code has not a
  * correct codification. Useful for debugging purposes.
+ * @param rejectedCandidateBits contains the bit patterns found inside the rejected squares. For
+ * debugging.
  * @param cameraMatrix optional input 3x3 floating-point camera matrix
  * \f$A = \vecthreethree{f_x}{0}{c_x}{0}{f_y}{c_y}{0}{0}{1}\f$
  * @param distCoeff optional vector of distortion coefficients
@@ -220,7 +222,8 @@ struct CV_EXPORTS_W DetectorParameters {
  */
 CV_EXPORTS_W void detectMarkers(InputArray image, const Ptr<Dictionary> &dictionary, OutputArrayOfArrays corners,
                                 OutputArray ids, const Ptr<DetectorParameters> &parameters = DetectorParameters::create(),
-                                OutputArrayOfArrays rejectedImgPoints = noArray(), InputArray cameraMatrix= noArray(), InputArray distCoeff= noArray());
+                                OutputArrayOfArrays rejectedImgPoints = noArray(), OutputArrayOfArrays rejectedCandidateBits = noArray(),
+                                InputArray cameraMatrix= noArray(), InputArray distCoeff= noArray());
 
 
 
@@ -258,6 +261,23 @@ CV_EXPORTS_W void estimatePoseSingleMarkers(InputArrayOfArrays corners, float ma
                                             OutputArray rvecs, OutputArray tvecs, OutputArray _objPoints = noArray());
 
 
+/**
+ * @brief Tries to identify one candidate given the dictionary
+ *
+ * @param dictionary indicates the type of markers that will be searched
+ * @param image input image
+ * @param corners vector of the four corners of the marker candidate (e.g. std::vector<cv::Point2f>). The order of the corners is clockwise.
+ * @param idx marker index in the dictionary, if identified
+ * @param parameters marker detection parameters
+ * @param candidateBits the raw detected inner bits of the marker
+ * @return candidate typ. zero if the candidate is not valid,
+ *                           1 if the candidate is a black candidate (default candidate)
+ *                           2 if the candidate is a white candidate
+ */
+CV_EXPORTS_W uint8_t identifyOneCandidate(const Ptr<Dictionary>& dictionary, InputArray image,
+                                          InputArray corners, int& idx,
+                                          const Ptr<DetectorParameters>& parameters = DetectorParameters::create(),
+                                          OutputArray candidateBits = noArray());
 
 /**
  * @brief Board of markers

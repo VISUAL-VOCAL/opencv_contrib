@@ -509,7 +509,8 @@ static int _getBorderErrors(const Mat &bits, int markerSize, int borderSize) {
  */
 static uint8_t _identifyOneCandidate(const Ptr<Dictionary>& dictionary, InputArray _image,
                                   vector<Point2f>& _corners, int& idx,
-                                  const Ptr<DetectorParameters>& params)
+                                  const Ptr<DetectorParameters>& params,
+                                  OutputArray _candidateBits = noArray())
 {
     CV_Assert(_corners.size() == 4);
     CV_Assert(_image.getMat().total() != 0);
@@ -548,6 +549,11 @@ static uint8_t _identifyOneCandidate(const Ptr<Dictionary>& dictionary, InputArr
                                candidateBits.rows - params->markerBorderBits)
             .colRange(params->markerBorderBits, candidateBits.rows - params->markerBorderBits);
 
+    if (_candidateBits.needed())
+    {
+        onlyBits.copyTo(_candidateBits);
+    }
+
     // try to indentify the marker
     int rotation;
     if(!dictionary->identify(onlyBits, idx, rotation, params->errorCorrectionRate))
@@ -559,6 +565,19 @@ static uint8_t _identifyOneCandidate(const Ptr<Dictionary>& dictionary, InputArr
     }
     return typ;
 }
+
+
+/**
+  */
+uint8_t identifyOneCandidate(const Ptr<Dictionary>& dictionary, InputArray _image,
+                             InputArray _corners, int& idx,
+                             const Ptr<DetectorParameters>& params,
+                             OutputArray _candidateBits)
+{
+    auto corners = (std::vector<Point2f>)_corners.getMat();
+    return _identifyOneCandidate(dictionary, _image, corners, idx, params, _candidateBits);
+}
+
 
 /**
  * @brief Copy the contents of a corners vector to an OutputArray, settings its size.
@@ -594,19 +613,53 @@ static void _copyVector2Output(vector< vector< Point2f > > &vec, OutputArrayOfAr
 }
 
 
+/**
+ * @brief Copy the contents of a bit vector to an OutputArray, settings its size.
+ */
+static void _copyBitVector2Output(vector< Mat > &vec, OutputArrayOfArrays out) {
+    out.create((int)vec.size(), 1, CV_8UC1);
+
+    if(out.isMatVector()) {
+        for (unsigned int i = 0; i < vec.size(); i++) {
+            out.create(vec[i].total(), 1, CV_8UC1, i);
+            Mat &m = out.getMatRef(i);
+            Mat(Mat(vec[i]).t()).copyTo(m);
+        }
+    }
+    else if(out.isUMatVector()) {
+        for (unsigned int i = 0; i < vec.size(); i++) {
+            out.create(vec[i].total(), 1, CV_8UC1, i);
+            UMat &m = out.getUMatRef(i);
+            Mat(Mat(vec[i]).t()).copyTo(m);
+        }
+    }
+    else if(out.kind() == _OutputArray::STD_VECTOR_VECTOR){
+        for (unsigned int i = 0; i < vec.size(); i++) {
+            out.create(vec[i].total(), 1, CV_8UC1, i);
+            Mat m = out.getMat(i);
+            Mat(Mat(vec[i]).t()).copyTo(m);
+        }
+    }
+    else {
+        CV_Error(cv::Error::StsNotImplemented,
+                 "Only Mat vector, UMat vector, and vector<vector> OutputArrays are currently supported.");
+    }
+}
+
 
 /**
  * @brief Identify square candidates according to a marker dictionary
  */
 static void _identifyCandidates(InputArray _image, vector< vector< vector< Point2f > > >& _candidatesSet,
                                 vector< vector< vector<Point> > >& _contoursSet, const Ptr<Dictionary> &_dictionary,
-                                vector< vector< Point2f > >& _accepted, vector< vector<Point> >& _contours, vector< int >& ids,
+                                vector< vector< Point2f > >& _acceptedCorners, vector< vector<Point> >& _contours, vector< int >& ids,
                                 const Ptr<DetectorParameters> &params,
-                                OutputArrayOfArrays _rejected = noArray()) {
+                                OutputArrayOfArrays _rejectedCorners = noArray(), OutputArrayOfArrays _rejectedBits = noArray()) {
 
     int ncandidates = (int)_candidatesSet[0].size();
-    vector< vector< Point2f > > accepted;
-    vector< vector< Point2f > > rejected;
+    vector< vector< Point2f > > acceptedCorners;
+    vector< vector< Point2f > > rejectedCorners;
+    vector< Mat > rejectedBits;
 
     vector< vector< Point > > contours;
 
@@ -617,6 +670,11 @@ static void _identifyCandidates(InputArray _image, vector< vector< vector< Point
 
     vector< int > idsTmp(ncandidates, -1);
     vector< uint8_t > validCandidates(ncandidates, 0);
+    vector< Mat > rejectedBitsTmp;
+    
+    if (_rejectedBits.needed()) {
+        rejectedBitsTmp.resize(ncandidates);
+    }
 
     //// Analyze each of the candidates
     parallel_for_(Range(0, ncandidates), [&](const Range &range) {
@@ -627,7 +685,7 @@ static void _identifyCandidates(InputArray _image, vector< vector< vector< Point
 
         for(int i = begin; i < end; i++) {
             int currId;
-            validCandidates[i] = _identifyOneCandidate(_dictionary, grey, candidates[i], currId, params);
+            validCandidates[i] = _identifyOneCandidate(_dictionary, grey, candidates[i], currId, params, _rejectedBits.needed() ? rejectedBitsTmp[i] : noArray());
 
             if(validCandidates[i] > 0)
                 idsTmp[i] = currId;
@@ -638,30 +696,38 @@ static void _identifyCandidates(InputArray _image, vector< vector< vector< Point
         if(validCandidates[i] > 0) {
             // add the white valid candidate
             if( params->detectInvertedMarker && validCandidates[i] == 2 ){
-                accepted.push_back(_candidatesSet[1][i]);
+                acceptedCorners.push_back(_candidatesSet[1][i]);
                 ids.push_back(idsTmp[i]);
 
                 contours.push_back(_contoursSet[1][i]);
                 continue;
             }
             // add the default (black) valid candidate
-            accepted.push_back(_candidatesSet[0][i]);
+            acceptedCorners.push_back(_candidatesSet[0][i]);
             ids.push_back(idsTmp[i]);
 
             contours.push_back(_contoursSet[0][i]);
 
         } else {
-            rejected.push_back(_candidatesSet[0][i]);
+            rejectedCorners.push_back(_candidatesSet[0][i]);
+
+            if (_rejectedBits.needed()) {
+                rejectedBits.push_back(rejectedBitsTmp[i]);
+            }
         }
     }
 
     // parse output
-    _accepted = accepted;
+    _acceptedCorners = acceptedCorners;
 
     _contours= contours;
 
-    if(_rejected.needed()) {
-        _copyVector2Output(rejected, _rejected);
+    if(_rejectedCorners.needed()) {
+        _copyVector2Output(rejectedCorners, _rejectedCorners);
+    }
+
+    if (_rejectedBits.needed()) {
+        _copyBitVector2Output(rejectedBits, _rejectedBits);
     }
 }
 
@@ -963,7 +1029,8 @@ static void _apriltag(Mat im_orig, const Ptr<DetectorParameters> & _params, std:
   */
 void detectMarkers(InputArray _image, const Ptr<Dictionary> &_dictionary, OutputArrayOfArrays _corners,
                    OutputArray _ids, const Ptr<DetectorParameters> &_params,
-                   OutputArrayOfArrays _rejectedImgPoints, InputArrayOfArrays camMatrix, InputArrayOfArrays distCoeff) {
+                   OutputArrayOfArrays _rejectedImgPoints, OutputArrayOfArrays _rejectedCandidateBits, 
+                   InputArrayOfArrays camMatrix, InputArrayOfArrays distCoeff) {
 
     CV_Assert(!_image.empty());
 
@@ -991,7 +1058,7 @@ void detectMarkers(InputArray _image, const Ptr<Dictionary> &_dictionary, Output
 
     /// STEP 2: Check candidate codification (identify markers)
     _identifyCandidates(grey, candidatesSet, contoursSet, _dictionary, candidates, contours, ids, _params,
-                        _rejectedImgPoints);
+                        _rejectedImgPoints, _rejectedCandidateBits);
 
     // copy to output arrays
     _copyVector2Output(candidates, _corners);
