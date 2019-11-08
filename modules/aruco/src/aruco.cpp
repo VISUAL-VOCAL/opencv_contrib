@@ -614,30 +614,30 @@ static void _copyVector2Output(vector< vector< Point2f > > &vec, OutputArrayOfAr
 
 
 /**
- * @brief Copy the contents of a bit vector to an OutputArray, settings its size.
+ * @brief Copy the contents of a bit vector to an OutputArray, setting its size.
  */
 static void _copyBitVector2Output(vector< Mat > &vec, OutputArrayOfArrays out) {
     out.create((int)vec.size(), 1, CV_8UC1);
 
     if(out.isMatVector()) {
         for (unsigned int i = 0; i < vec.size(); i++) {
-            out.create(vec[i].total(), 1, CV_8UC1, i);
+            out.create((int)vec[i].total(), 1, CV_8UC1, i);
             Mat &m = out.getMatRef(i);
-            Mat(Mat(vec[i]).t()).copyTo(m);
+            Mat(vec[i]).copyTo(m);
         }
     }
     else if(out.isUMatVector()) {
         for (unsigned int i = 0; i < vec.size(); i++) {
-            out.create(vec[i].total(), 1, CV_8UC1, i);
+            out.create((int)vec[i].total(), 1, CV_8UC1, i);
             UMat &m = out.getUMatRef(i);
-            Mat(Mat(vec[i]).t()).copyTo(m);
+            Mat(vec[i]).copyTo(m);
         }
     }
     else if(out.kind() == _OutputArray::STD_VECTOR_VECTOR){
         for (unsigned int i = 0; i < vec.size(); i++) {
-            out.create(vec[i].total(), 1, CV_8UC1, i);
+            out.create((int)vec[i].total(), 1, CV_8UC1, i);
             Mat m = out.getMat(i);
-            Mat(Mat(vec[i]).t()).copyTo(m);
+            Mat(vec[i]).copyTo(m);
         }
     }
     else {
