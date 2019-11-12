@@ -544,13 +544,11 @@ static uint8_t _identifyOneCandidate(const Ptr<Dictionary>& dictionary, InputArr
     if(borderErrors > maximumErrorsInBorder) return 0; // border is wrong
 
     // take only inner bits
-    Mat onlyBits =
-        candidateBits.rowRange(params->markerBorderBits,
-                               candidateBits.rows - params->markerBorderBits)
-            .colRange(params->markerBorderBits, candidateBits.rows - params->markerBorderBits);
+    Mat onlyBits = candidateBits
+        .rowRange(params->markerBorderBits, candidateBits.rows - params->markerBorderBits)
+        .colRange(params->markerBorderBits, candidateBits.rows - params->markerBorderBits);
 
-    if (_candidateBits.needed())
-    {
+    if(_candidateBits.needed()) {
         onlyBits.copyTo(_candidateBits);
     }
 

@@ -99,12 +99,14 @@ bool Dictionary::identify(const Mat &onlyBits, int &idx, int &rotation,
 
     CV_Assert(onlyBits.rows == markerSize && onlyBits.cols == markerSize);
 
-    int maxCorrectionRecalculed = int(double(maxCorrectionBits) * maxCorrectionRate);
+    int maxCorrectionRecalculated = int(double(maxCorrectionBits) * maxCorrectionRate);
 
     // get as a byte list
     Mat candidateBytes = getByteListFromBits(onlyBits);
 
     idx = -1; // by default, not found
+
+    int bestMinDistance = markerSize * markerSize + 1;
 
     // search closest marker in dict
     for(int m = 0; m < bytesList.rows; m++) {
@@ -122,11 +124,20 @@ bool Dictionary::identify(const Mat &onlyBits, int &idx, int &rotation,
             }
         }
 
-        // if maxCorrection is fullfilled, return this one
-        if(currentMinDistance <= maxCorrectionRecalculed) {
-            idx = m;
-            rotation = currentRotation;
-            break;
+        // if maxCorrection is fullfilled then nominate this as the potential match
+        // but keep searching to see if there's a better match
+        // also disallow results that have the same distance
+        if(currentMinDistance <= maxCorrectionRecalculated) {
+            if (currentMinDistance < bestMinDistance) {
+                idx = m;
+                rotation = currentRotation;
+                bestMinDistance = currentMinDistance;
+            }
+            else if (currentMinDistance > 0 && currentMinDistance == bestMinDistance) {
+                // disallow duplicate matches
+                idx = -1;
+                rotation = -1;
+            }
         }
     }
 
